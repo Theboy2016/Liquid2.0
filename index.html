@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>LiquidGlass Camera</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['SF Pro Text', 'SF Pro Display', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+            },
+            colors: {
+              iosYellow: '#FFD60A',
+            },
+          },
+        },
+      }
+    </script>
+    <link rel="manifest" href="/manifest.json" />
+    <style>
+      :root {
+        /* Apple-style Easing Curves */
+        --ease-ios: cubic-bezier(0.25, 1, 0.5, 1);
+        --ease-slide: cubic-bezier(0.19, 1, 0.22, 1);
+        --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* Elastic bounce */
+        --ease-bloom: cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      body {
+        background-color: #000;
+        overflow: hidden; 
+        overscroll-behavior-y: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* === SHARED GLASS STYLE === */
+      .glass-base {
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.18);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        transform: translate3d(0,0,0); /* Force GPU */
+      }
+
+      /* === TOP SETTINGS BUTTON === */
+      .top-settings-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 60;
+        color: white;
+        transition: transform 0.2s ease-out, background 0.2s ease;
+      }
+      .top-settings-btn:active { 
+        transform: scale(0.92);
+        background: rgba(255,255,255,0.2); 
+      }
+
+      /* === LARGE IOS SETTINGS PANEL === */
+      @keyframes ios-panel-enter {
+        0% { opacity: 0; transform: translate3d(-50%, 12px, 0) scale(0.96); }
+        100% { opacity: 1; transform: translate3d(-50%, 0, 0) scale(1); }
+      }
+
+      .ios-settings-panel {
+        position: absolute;
+        top: 80px;
+        left: 50%;
+        width: 92%;
+        max-width: 360px;
+        padding: 24px;
+        border-radius: 32px;
+        z-index: 55;
+        /* Animation */
+        transform-origin: top center;
+        animation: ios-panel-enter 0.4s var(--ease-slide) forwards;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .settings-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        width: 100%;
+        justify-items: center;
+      }
+
+      @keyframes ios-bloom-item {
+        0% { opacity: 0; transform: scale(0.4); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+
+      .settings-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        color: white;
+        /* Base state for animation */
+        opacity: 0; 
+        animation: ios-bloom-item 0.5s var(--ease-spring) forwards;
+      }
+      
+      .settings-icon-circle {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.3s ease, color 0.3s ease, transform 0.2s var(--ease-spring);
+      }
+      .settings-item:active .settings-icon-circle {
+        transform: scale(0.92);
+      }
+      .settings-item.active .settings-icon-circle {
+        background: rgba(255, 214, 10, 0.2);
+        color: #FFD60A;
+      }
+      
+      .settings-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        opacity: 0.8;
+      }
+
+      /* === RESOLUTION CAPSULE === */
+      .resolution-capsule {
+        display: flex;
+        position: relative;
+        width: 220px;
+        height: 40px;
+        border-radius: 999px;
+        background: rgba(0,0,0,0.2);
+        border: 1px solid rgba(255,255,255,0.1);
+        padding: 4px;
+        margin-top: 8px;
+        opacity: 0;
+        animation: ios-bloom-item 0.5s var(--ease-spring) forwards 0.3s; /* delayed entry */
+      }
+      .resolution-capsule::before {
+        content: "";
+        position: absolute;
+        top: 4px; bottom: 4px; left: 4px;
+        width: calc((100% - 8px) / 2);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.2);
+        /* Inertia Slide */
+        transition: transform 350ms var(--ease-slide);
+        z-index: 1;
+        transform: translate3d(0,0,0);
+      }
+      .resolution-capsule.res-1080::before { transform: translate3d(0%, 0, 0); }
+      .resolution-capsule.res-720::before { transform: translate3d(100%, 0, 0); }
+
+      .res-option {
+        flex: 1;
+        z-index: 2;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255,255,255,0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.2s ease;
+      }
+      .res-option.selected { color: #fff; text-shadow: 0 0 12px rgba(255,255,255,0.5); }
+
+      /* === ZOOM BAR === */
+      .zoom-bar {
+        position: absolute;
+        bottom: 190px;
+        left: 50%;
+        transform: translate3d(-50%, 0, 0);
+        padding: 6px 12px;
+        border-radius: 26px;
+        display: flex;
+        gap: 12px;
+        z-index: 40;
+        align-items: center;
+      }
+      
+      .zoom-option {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: white;
+        /* Smooth scale */
+        transition: transform 0.4s var(--ease-spring), background 0.3s ease, color 0.3s ease;
+      }
+      
+      .zoom-option.active {
+        background: rgba(0,0,0,0.3);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.4);
+        transform: scale(1.15); /* Elastic pop */
+        color: #FFD60A;
+      }
+
+      /* === SHUTTER BUTTON === */
+      .shutter-button {
+        position: absolute;
+        bottom: 100px;
+        left: 50%;
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        border: 4px solid rgba(255,255,255,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+        /* Important: Independent transform for container allows distinct click effect */
+        transform: translate3d(-50%, 0, 0);
+        transition: transform 0.2s ease-out; /* Press down speed */
+      }
+      
+      .shutter-button.is-pressed {
+        transform: translate3d(-50%, 0, 0) scale(0.92);
+      }
+      
+      /* Release bounce logic handled by removing is-pressed class which reverts to natural scale */
+      .shutter-button:not(.is-pressed) {
+        transition: transform 0.5s var(--ease-spring);
+      }
+
+      .shutter-inner {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: white;
+        transition: all 0.3s var(--ease-slide);
+      }
+      
+      .shutter-inner.recording {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: #FF3B30;
+      }
+      .shutter-inner.video-ready {
+        background: #FF3B30;
+        width: 60px;
+        height: 60px;
+      }
+
+      /* === BOTTOM ROW === */
+      .bottom-controls-row {
+        position: absolute;
+        bottom: 40px;
+        left: 0; 
+        right: 0;
+        height: 50px;
+        padding: 0 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 45;
+      }
+
+      .gallery-circle {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s ease-out;
+      }
+      .gallery-circle:active { transform: scale(0.92); }
+
+      .switch-camera-circle {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.15);
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        transition: transform 0.5s var(--ease-slide);
+      }
+      .switch-camera-circle:active { transform: scale(0.9); }
+      .switch-camera-circle.rotate { transform: rotate(180deg); }
+
+      /* === MODE CAPSULE === */
+      .mode-capsule {
+        display: inline-flex;
+        width: 140px;
+        height: 34px;
+        border-radius: 999px;
+        justify-content: space-between;
+        padding: 3px;
+        touch-action: none;
+        position: relative;
+      }
+      
+      .mode-capsule::before {
+        content: "";
+        position: absolute;
+        top: 3px; bottom: 3px; left: 3px;
+        width: calc((100% - 6px) / 2);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.2);
+        backdrop-filter: blur(26px) saturate(180%);
+        border: 1px solid rgba(255,255,255,0.3);
+        pointer-events: none;
+        z-index: 1;
+        /* Smooth inertia slide */
+        transition: transform 350ms var(--ease-slide);
+        transform: translate3d(var(--highlight-x, 0px), 0, 0);
+        will-change: transform;
+      }
+      
+      .mode-capsule.video { --highlight-x: 0% !important; }
+      .mode-capsule.photo { --highlight-x: 100% !important; }
+      /* Disable transition when dragging for 1:1 finger tracking */
+      .mode-capsule.dragging::before { transition: none !important; }
+
+      .mode-option {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: rgba(255,255,255,0.6);
+        font-weight: 600;
+        font-size: 11px;
+        text-align: center;
+        z-index: 2;
+        letter-spacing: 0.5px;
+        transition: opacity 0.3s ease;
+      }
+      .mode-option.selected {
+        color: #FFD60A;
+        font-weight: 700;
+      }
+
+      /* === FOCUS RING === */
+      @keyframes focus-pulse-ios {
+        0% { transform: translate3d(-50%, -50%, 0) scale(0.65); opacity: 0; }
+        35% { transform: translate3d(-50%, -50%, 0) scale(1.08); opacity: 1; border-width: 2px; }
+        100% { transform: translate3d(-50%, -50%, 0) scale(1); opacity: 0; border-width: 1px; }
+      }
+      .focus-ring {
+        position: absolute;
+        width: 72px;
+        height: 72px;
+        border: 1.5px solid #FFD60A;
+        border-radius: 50%;
+        transform: translate3d(-50%, -50%, 0);
+        pointer-events: none;
+        z-index: 25;
+        box-shadow: 0 0 20px rgba(255, 214, 10, 0.4);
+        animation: focus-pulse-ios 0.8s ease-out forwards;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "@capacitor/core": "https://esm.sh/@capacitor/core@^8.0.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@capacitor/filesystem": "https://esm.sh/@capacitor/filesystem@^8.0.0",
+    "@capacitor/camera": "https://esm.sh/@capacitor/camera@^8.0.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

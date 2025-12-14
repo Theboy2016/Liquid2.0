@@ -1,0 +1,8 @@
+{
+  "name": "LiquidGlass Camera",
+  "description": "A high-fidelity PWA camera experience with glassmorphism UI, professional manual controls, and gallery management.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

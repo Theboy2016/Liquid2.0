@@ -1,0 +1,6 @@
+{
+	"appId": "com.psjdbd.liquidglass",
+	"appName": "LiquidGlass Camera",
+	"webDir": "dist",
+	"bundledWebRuntime": false
+}
