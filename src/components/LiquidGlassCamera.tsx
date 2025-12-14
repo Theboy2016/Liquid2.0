@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import {
   requestAndroidPermissions,
   checkPermissionsStatus
-} from "../src/utils/permissions";
+} from "../utils/permissions";
 import { 
   Zap, 
   ZapOff, 
